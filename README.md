@@ -1,5 +1,5 @@
-# Holy Mackerel v5.6.0
-### A Vactrol-less Low Pass Gate for Expert Sleepers Disting NT
+# Holy Mackerel
+### A Vactrol-Modeled Low Pass Gate for Expert Sleepers Disting NT
 
 * * *
         ██╗  ██╗ ██████╗ ██╗     ██╗   ██╗    ███╗   ███╗ █████╗  ██████╗██╗  ██╗███████╗██████╗ ███████╗██╗
