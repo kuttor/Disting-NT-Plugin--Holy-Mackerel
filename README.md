@@ -14,7 +14,7 @@
 
 ## Overview
 
-Holy Mackerel is a **stereo low pass gate** algorithm for the **Expert Sleepers Disting NT**, inspired by the *Buchla 292* and modern LPG interpretations (Natural Gate / Rabbit / Elephant / solid-state stereo gates).
+Holy Mackerel is a **stereo low pass gate** algorithm for the **Expert Sleepers Disting NT**, inspired by the *Buchla 292* and modern LPG interpretations (Rabid Elephant's Natural Gate / SSF Stereo Gate).
 
 The goal is not strict emulation.  
 The goal is **feel**.
