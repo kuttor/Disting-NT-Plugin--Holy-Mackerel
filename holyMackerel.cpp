@@ -200,14 +200,15 @@ public:
         
         // Makeup gain only kicks in above ~20% resonance
         if (res > 0.2f) {
-            resMakeupGain = 1.0f + (res - 0.2f) * (res - 0.2f) * 2.0f;
+            resMakeupGain = 1.0f + (res - 0.2f) * (res - 0.2f) * 2.5f;
         } else {
             resMakeupGain = 1.0f;
         }
         
-        // Bass compensation above 30% resonance
-        if (res > 0.3f) {
-            resBassBoost = 1.0f + (res - 0.3f) * 1.2f;
+        // Bass compensation above 20% resonance - MORE AGGRESSIVE
+        // Resonant filters lose bass, this compensates
+        if (res > 0.2f) {
+            resBassBoost = 1.0f + (res - 0.2f) * 2.5f;  // Much stronger
         } else {
             resBassBoost = 1.0f;
         }
@@ -562,8 +563,6 @@ class LPGChannel {
 public:
     void setSampleRate(float sr) {
         sampleRate = sr;
-        vactrolVCA.setSampleRate(sr);
-        vactrolFilter.setSampleRate(sr);
         filter.setSampleRate(sr);
         fx.setSampleRate(sr);
     }
@@ -580,64 +579,73 @@ public:
         this->hitMemoryOn = hitMemory;
         
         // DECAY parameter: How long the envelope takes to decay back to ZERO
-        // At 120bpm, 8 steps = 250ms between triggers
-        // 
-        // Current issue: 50% feels like what 90% should be
-        // Fix: Compress the range so most of the control is in short decay territory
+        // Need musical tone starting earlier - not just clicks in 0-30%
         //
-        // New scaling:
-        // 0-20%: Clicks to short plucks (3-30ms)
-        // 20-50%: Short plucks (30-80ms) - snappy percussion
-        // 50-70%: Medium (80-150ms) - good for 120bpm
-        // 70-85%: Long (150-400ms) - notes overlap slightly  
-        // 85-95%: Very long (400ms-1.5s) - sustained
-        // 95-100%: Drone (1.5s-5s)
+        // New scaling - more tone earlier:
+        // 0-5%: Clicks (5-15ms) - very short, barely tone
+        // 5-15%: Short with tone (15-40ms) - you hear the note
+        // 15-30%: Plucky (40-100ms) - clear LPG character
+        // 30-50%: Medium (100-200ms) - good for 120bpm
+        // 50-70%: Long (200-500ms) - notes overlap
+        // 70-85%: Very long (500ms-1.5s) - sustained
+        // 85-100%: Drone (1.5s-5s)
         
         float baseDecayMs;
-        if (decayParam < 0.20f) {
-            // 0-20%: Clicks to short (3-30ms)
-            float t = decayParam / 0.20f;
-            baseDecayMs = 3.0f + t * 27.0f;
+        if (decayParam < 0.05f) {
+            // 0-5%: Clicks (5-15ms)
+            float t = decayParam / 0.05f;
+            baseDecayMs = 5.0f + t * 10.0f;
+        } else if (decayParam < 0.15f) {
+            // 5-15%: Short with tone (15-40ms)
+            float t = (decayParam - 0.05f) / 0.10f;
+            baseDecayMs = 15.0f + t * 25.0f;
+        } else if (decayParam < 0.30f) {
+            // 15-30%: Plucky (40-100ms)
+            float t = (decayParam - 0.15f) / 0.15f;
+            baseDecayMs = 40.0f + t * 60.0f;
         } else if (decayParam < 0.50f) {
-            // 20-50%: Short plucks (30-80ms)
-            float t = (decayParam - 0.20f) / 0.30f;
-            baseDecayMs = 30.0f + t * 50.0f;
+            // 30-50%: Medium (100-200ms)
+            float t = (decayParam - 0.30f) / 0.20f;
+            baseDecayMs = 100.0f + t * 100.0f;
         } else if (decayParam < 0.70f) {
-            // 50-70%: Medium (80-150ms)
+            // 50-70%: Long (200-500ms)
             float t = (decayParam - 0.50f) / 0.20f;
-            baseDecayMs = 80.0f + t * 70.0f;
+            baseDecayMs = 200.0f + t * 300.0f;
         } else if (decayParam < 0.85f) {
-            // 70-85%: Long (150-400ms)
+            // 70-85%: Very long (500ms-1.5s)
             float t = (decayParam - 0.70f) / 0.15f;
-            baseDecayMs = 150.0f + t * 250.0f;
-        } else if (decayParam < 0.95f) {
-            // 85-95%: Very long (400ms-1.5s)
-            float t = (decayParam - 0.85f) / 0.10f;
-            baseDecayMs = 400.0f + t * 1100.0f;
+            baseDecayMs = 500.0f + t * 1000.0f;
         } else {
-            // 95-100%: Drone (1.5s-5s)
-            float t = (decayParam - 0.95f) / 0.05f;
+            // 85-100%: Drone (1.5s-5s)
+            float t = (decayParam - 0.85f) / 0.15f;
             baseDecayMs = 1500.0f + t * 3500.0f;
         }
         
         // Apply material multiplier to decay
         float vcaDecayMs = baseDecayMs * kMaterialDecayMult[material];
-        float filterDecayMs = vcaDecayMs / kMaterialFilterDecayRatio[material];
         
         // Apply dampening (shortens decay further)
         vcaDecayMs *= (1.0f - dampening * 0.6f);
-        filterDecayMs *= (1.0f - dampening * 0.7f);
         
-        // Attack times from material - very fast for percussive response
-        float attackMs = kMaterialAttackTime[material] * 1000.0f;
-        attackMs *= (1.0f + dampening * 2.0f);
-        attackMs = fmaxf(attackMs, 0.3f);  // Minimum 0.3ms
+        // Calculate decay coefficient for per-sample exponential decay
+        // coefficient = e^(-1 / (tau * sampleRate))
+        // tau = time constant in seconds
+        // For envelope to decay to ~5% in vcaDecayMs, tau ≈ vcaDecayMs / 3
+        // But we want the FULL decay time, not 1/3 of it
+        float tauSamples = vcaDecayMs * 0.001f * sampleRate;
+        if (tauSamples > 0.0f) {
+            decayCoefficient = expf(-1.0f / tauSamples);
+        } else {
+            decayCoefficient = 0.0f;  // Instant decay
+        }
         
-        // Filter attack slightly faster for that LPG "pluck"
-        float filterAttackMs = fmaxf(attackMs * 0.7f, 0.2f);
-        
-        vactrolVCA.setTimes(attackMs, vcaDecayMs);
-        vactrolFilter.setTimes(filterAttackMs, filterDecayMs);
+        // Attack coefficient - fast but not instant to avoid scratchy clicks
+        // Attack time scales with decay: shorter decay = faster attack
+        // But always at least 0.5ms to smooth the transient
+        float attackMs = fmaxf(0.5f, vcaDecayMs * 0.02f);  // 2% of decay time, min 0.5ms
+        attackMs = fminf(attackMs, 5.0f);  // Max 5ms attack
+        float attackTauSamples = attackMs * 0.001f * sampleRate;
+        attackCoefficient = 1.0f - expf(-1.0f / attackTauSamples);
         
         // Filter setup
         filter.setResonance(resonance);
@@ -650,39 +658,59 @@ public:
     
     void trigger(float velocity = 1.0f) {
         // Trigger opens gate to (velocity * openCeiling)
-        // Open controls HOW MUCH the gate opens (ceiling)
-        // Then gate decays back to ZERO via vactrol
+        // Set target level - the envelope will attack toward this
         
         float targetLevel = velocity * openCeiling;
         
         if (hitMemoryOn) {
             // Memory mode: ADD to current envelope level
-            targetLevel = clampf(vactrolVCA.getValue() + targetLevel, 0.0f, 1.2f);
+            targetLevel = clampf(envelopeState + targetLevel, 0.0f, 1.2f);
         }
         
-        // VCA snaps open instantly for percussive attack
-        vactrolVCA.setState(targetLevel);
-        
-        // FILTER does NOT snap - it attacks smoothly to avoid click
-        // Just set the target, let the vactrol attack coefficient handle it
+        // Set the TARGET, not the state directly
+        // This allows for a tiny attack time to avoid scratchy clicks
+        envelopeTarget = targetLevel;
         filterTarget = targetLevel;
         
         triggerVisual = 1.0f;
     }
     
     float process(float input) {
-        // VCA: already at target, decays toward 0
-        float vcaGate = vactrolVCA.process(0.0f);
+        // Envelope attacks toward target, then decays toward zero
+        // The tiny attack time smooths the click into the tone
         
-        // Filter: attacks toward filterTarget, then decays toward 0
-        // This smooth attack prevents the click artifact
-        float currentFilterTarget = (filterTarget > 0.01f) ? filterTarget : 0.0f;
-        float filterGate = vactrolFilter.process(currentFilterTarget);
-        
-        // Once filter reaches target, switch to decay
-        if (filterGate >= filterTarget * 0.9f) {
-            filterTarget = 0.0f;
+        // Attack toward target (fast but not instant)
+        if (envelopeTarget > envelopeState) {
+            envelopeState += (envelopeTarget - envelopeState) * attackCoefficient;
+            // Once we've reached the target, switch to decay
+            if (envelopeState >= envelopeTarget * 0.99f) {
+                envelopeState = envelopeTarget;
+                envelopeTarget = 0.0f;  // Now decay toward zero
+            }
+        } else {
+            // Decay toward zero
+            envelopeState *= decayCoefficient;
         }
+        
+        // Filter has same attack but faster decay
+        if (filterTarget > filterState) {
+            filterState += (filterTarget - filterState) * attackCoefficient;
+            if (filterState >= filterTarget * 0.99f) {
+                filterState = filterTarget;
+                filterTarget = 0.0f;
+            }
+        } else {
+            // Filter decays faster
+            float filterRatio = kMaterialFilterDecayRatio[material];
+            filterState *= powf(decayCoefficient, filterRatio);
+        }
+        
+        // Clamp to zero
+        if (envelopeState < 0.0001f) envelopeState = 0.0f;
+        if (filterState < 0.0001f) filterState = 0.0f;
+        
+        float vcaGate = envelopeState;
+        float filterGate = filterState;
         
         lastGate = vcaGate;
         
@@ -704,15 +732,14 @@ public:
     float getTriggerVisual() const { return triggerVisual; }
     
     void reset() {
-        vactrolVCA.reset();
-        vactrolFilter.reset();
         filter.reset();
         fx.reset();
         dcBlocker.reset();
-        triggerVisual = 0.0f;
-        envelopePeak = 0.0f;
+        envelopeState = 0.0f;
+        envelopeTarget = 0.0f;
+        filterState = 0.0f;
         filterTarget = 0.0f;
-        decaying = false;
+        triggerVisual = 0.0f;
         lastGate = 0.0f;
     }
     
@@ -724,14 +751,15 @@ private:
     MaterialMode material = MATERIAL_NATURAL;
     bool hitMemoryOn = false;
     
-    float envelopePeak = 0.0f;  // Not used anymore but keep for compatibility
-    float filterTarget = 0.0f;  // Target for filter (smooth attack)
-    bool decaying = false;
+    float envelopeState = 0.0f;     // Current envelope level
+    float envelopeTarget = 0.0f;    // Target for attack phase
+    float filterState = 0.0f;       // Filter envelope (decays faster)
+    float filterTarget = 0.0f;      // Filter target for attack
+    float decayCoefficient = 0.99f; // Per-sample decay multiplier
+    float attackCoefficient = 0.1f; // Per-sample attack multiplier
     float triggerVisual = 0.0f;
     float lastGate = 0.0f;
     
-    VactrolModel vactrolVCA;
-    VactrolModel vactrolFilter;
     BuchlaLPGFilter filter;
     FXProcessor fx;
     DCBlocker dcBlocker;
