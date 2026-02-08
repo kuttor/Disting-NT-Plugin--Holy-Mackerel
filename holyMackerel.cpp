@@ -1037,6 +1037,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     }
     
     alg->hitPhase += 0.06f;
+    if (alg->hitPhase > 100.0f) alg->hitPhase = 100.0f;
 }
 
 // ============================================================================
