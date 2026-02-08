@@ -996,24 +996,26 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     float gain = getGainFromParam(alg->v[kParamGain]);
     bool hitMemory = (alg->v[kParamHitMemory] == 1);
     
+    const int cvUpdateInterval = 32;
+
     for (int i = 0; i < numFrames; ++i) {
         if (trigIn && alg->trigger.process(trigIn[i])) {
             float vel = clampf(alg->trigger.getLastLevel() / 5.0f, 0.5f, 1.0f);
             alg->channelL.trigger(vel);
             if (stereo) alg->channelR.trigger(vel);
-            
+
             alg->hitIntensity = vel;
             alg->hitPhase = 0.0f;
         }
-        
-        if (resCV || decCV || openCV || dampCV || fxCV) {
+
+        if ((resCV || decCV || openCV || dampCV || fxCV) && (i % cvUpdateInterval == 0)) {
             float r = baseRes, d = baseDec, o = baseOpen, dp = baseDamp, f = baseFX;
             if (resCV) r = clampf(baseRes + resCV[i] * 0.1f, 0.0f, 1.0f);
             if (decCV) d = clampf(baseDec + decCV[i] * 0.1f, 0.0f, 1.0f);
             if (openCV) o = clampf(baseOpen + openCV[i] * 0.1f, 0.0f, 1.0f);
             if (dampCV) dp = clampf(baseDamp + dampCV[i] * 0.1f, 0.0f, 1.0f);
             if (fxCV) f = clampf(baseFX + fxCV[i] * 0.1f, 0.0f, 1.0f);
-            
+
             alg->channelL.setParams(r, d, o, dp, material, fxMode, f, gain, hitMemory);
             if (stereo) alg->channelR.setParams(r, d, o, dp, material, fxMode, f, gain, hitMemory);
         }
