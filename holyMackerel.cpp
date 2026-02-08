@@ -1100,59 +1100,67 @@ bool draw(_NT_algorithm* self) {
     
     const int hitCenterX = 175;
     const int hitCenterY = 32 + yOffset;
-    
+    const int maxYRadius = 25;  // min(hitCenterY, 63 - hitCenterY) - 1px margin
+
     float gateL = alg->channelL.getGateValue();
     float gateR = (alg->v[kParamStereo] == 1) ? alg->channelR.getGateValue() : gateL;
     float gate = (gateL + gateR) * 0.5f;
-    
+
     float hitVis = alg->hitIntensity * expf(-alg->hitPhase * 0.4f);
-    
+
     int numRays = 16;
     float baseRadius = 8.0f + gate * 15.0f;
     float burstRadius = baseRadius + hitVis * 20.0f;
-    
+    if (burstRadius > (float)maxYRadius - 8.0f) burstRadius = (float)maxYRadius - 8.0f;
+
     if (hitVis > 0.1f) {
         int glowR = (int)(burstRadius + 5 + hitVis * 6);
+        if (glowR > maxYRadius) glowR = maxYRadius;
         NT_drawShapeI(kNT_circle, hitCenterX - glowR, hitCenterY - glowR,
                       hitCenterX + glowR, hitCenterY + glowR, 4 + (int)(hitVis * 3));
     }
-    
+
     for (int r = 0; r < numRays; r++) {
         float angle = (float)r * TWO_PI / numRays;
         if (hitVis > 0.05f) angle += alg->hitPhase * 0.15f;
-        
+
         float innerR = 3.0f + gate * 5.0f;
         int x1 = hitCenterX + (int)(cosf(angle) * innerR);
         int y1 = hitCenterY + (int)(sinf(angle) * innerR);
-        
+
         float lenMod = (r % 4 == 0) ? 1.0f : ((r % 4 == 2) ? 0.4f : 0.65f);
         float outerR = burstRadius * lenMod;
         int x2 = hitCenterX + (int)(cosf(angle) * outerR);
         int y2 = hitCenterY + (int)(sinf(angle) * outerR);
-        
+
         NT_drawShapeI(kNT_line, x1, y1, x2, y2, 8 + (int)(gate * 5) + (int)(hitVis * 2));
     }
-    
+
     if (hitVis > 0.05f) {
         int ringR = (int)(burstRadius * 0.7f + hitVis * 10);
+        if (ringR > maxYRadius) ringR = maxYRadius;
         NT_drawShapeI(kNT_circle, hitCenterX - ringR, hitCenterY - ringR,
                       hitCenterX + ringR, hitCenterY + ringR, 7 + (int)(hitVis * 4));
     }
-    
+
     int centerR = 4 + (int)(gate * 6);
     NT_drawShapeI(kNT_rectangle, hitCenterX - centerR, hitCenterY - centerR,
                   hitCenterX + centerR, hitCenterY + centerR, 15);
-    
+
     int boundaryR = (int)burstRadius + 8;
+    if (boundaryR > maxYRadius) boundaryR = maxYRadius;
     NT_drawShapeI(kNT_circle, hitCenterX - boundaryR, hitCenterY - boundaryR,
                   hitCenterX + boundaryR, hitCenterY + boundaryR, 5);
-    
+
     NT_drawText(250, 8, "HOLY", 7, kNT_textRight, kNT_textTiny);
     NT_drawText(250, 16, "MACKEREL", 7, kNT_textRight, kNT_textTiny);
-    
-    char gateBuf[8];
-    snprintf(gateBuf, sizeof(gateBuf), "%d%%", (int)(gate * 100));
-    NT_drawText(hitCenterX, hitCenterY + boundaryR + 8, gateBuf, 6, kNT_textCentre, kNT_textTiny);
+
+    int textY = hitCenterY + boundaryR + 8;
+    if (textY <= 63) {
+        char gateBuf[8];
+        snprintf(gateBuf, sizeof(gateBuf), "%d%%", (int)(gate * 100));
+        NT_drawText(hitCenterX, textY, gateBuf, 6, kNT_textCentre, kNT_textTiny);
+    }
     
     return false;
 }
