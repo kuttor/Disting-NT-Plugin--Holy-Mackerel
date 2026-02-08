@@ -60,6 +60,8 @@ static inline float fast_tanh(float x) {
     return x * (27.0f + x2) / (27.0f + 9.0f * x2);
 }
 
+static inline int clampColor(int c) { return c < 0 ? 0 : (c > 15 ? 15 : c); }
+
 static inline float soft_saturate(float x, float knee) {
     float ax = fabsf(x);
     if (ax < knee) return x;
@@ -1117,7 +1119,7 @@ bool draw(_NT_algorithm* self) {
         int glowR = (int)(burstRadius + 5 + hitVis * 6);
         if (glowR > maxYRadius) glowR = maxYRadius;
         NT_drawShapeI(kNT_circle, hitCenterX - glowR, hitCenterY - glowR,
-                      hitCenterX + glowR, hitCenterY + glowR, 4 + (int)(hitVis * 3));
+                      hitCenterX + glowR, hitCenterY + glowR, clampColor(4 + (int)(hitVis * 3)));
     }
 
     for (int r = 0; r < numRays; r++) {
@@ -1133,14 +1135,14 @@ bool draw(_NT_algorithm* self) {
         int x2 = hitCenterX + (int)(cosf(angle) * outerR);
         int y2 = hitCenterY + (int)(sinf(angle) * outerR);
 
-        NT_drawShapeI(kNT_line, x1, y1, x2, y2, 8 + (int)(gate * 5) + (int)(hitVis * 2));
+        NT_drawShapeI(kNT_line, x1, y1, x2, y2, clampColor(8 + (int)(gate * 5) + (int)(hitVis * 2)));
     }
 
     if (hitVis > 0.05f) {
         int ringR = (int)(burstRadius * 0.7f + hitVis * 10);
         if (ringR > maxYRadius) ringR = maxYRadius;
         NT_drawShapeI(kNT_circle, hitCenterX - ringR, hitCenterY - ringR,
-                      hitCenterX + ringR, hitCenterY + ringR, 7 + (int)(hitVis * 4));
+                      hitCenterX + ringR, hitCenterY + ringR, clampColor(7 + (int)(hitVis * 4)));
     }
 
     int centerR = 4 + (int)(gate * 6);
