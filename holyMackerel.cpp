@@ -996,8 +996,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     float gain = getGainFromParam(alg->v[kParamGain]);
     bool hitMemory = (alg->v[kParamHitMemory] == 1);
     
-    const int cvUpdateInterval = 32;
-
     for (int i = 0; i < numFrames; ++i) {
         if (trigIn && alg->trigger.process(trigIn[i])) {
             float vel = clampf(alg->trigger.getLastLevel() / 5.0f, 0.5f, 1.0f);
@@ -1008,7 +1006,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             alg->hitPhase = 0.0f;
         }
 
-        if ((resCV || decCV || openCV || dampCV || fxCV) && (i % cvUpdateInterval == 0)) {
+        if ((resCV || decCV || openCV || dampCV || fxCV) && ((i & 31) == 0)) {
             float r = baseRes, d = baseDec, o = baseOpen, dp = baseDamp, f = baseFX;
             if (resCV) r = clampf(baseRes + resCV[i] * 0.1f, 0.0f, 1.0f);
             if (decCV) d = clampf(baseDec + decCV[i] * 0.1f, 0.0f, 1.0f);
@@ -1105,7 +1103,7 @@ bool draw(_NT_algorithm* self) {
     
     const int hitCenterX = 175;
     const int hitCenterY = 32 + yOffset;
-    const int maxYRadius = 25;  // min(hitCenterY, 63 - hitCenterY) - 1px margin
+    const int maxYRadius = (hitCenterY < 63 - hitCenterY ? hitCenterY : 63 - hitCenterY) - 1;
 
     float gateL = alg->channelL.getGateValue();
     float gateR = (alg->v[kParamStereo] == 1) ? alg->channelR.getGateValue() : gateL;
